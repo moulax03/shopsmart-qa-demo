@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cart — ShopSmart</title>
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <header>
+    <nav class="navbar" id="navbar"></nav>
+  </header>
+
+  <main class="page-wrapper">
+    <div class="container">
+      <h1 style="margin-bottom: 1.5rem;">Your Cart</h1>
+
+      <div id="cart-content">
+        <div class="flex-center" style="padding: 4rem;">
+          <div class="spinner"></div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+      <p>&copy; 2024 ShopSmart. All rights reserved.</p>
+    </div>
+  </footer>
+
+  <script src="/js/main.js"></script>
+  <script>
+    renderNavbar();
+    requireAuth();
+
+    // BUG-005: Order summary totals — these are set once when page loads.
+    // Updating quantity via the PUT API will NOT recalculate the summary.
+    // Only a full page reload will show accurate totals.
+    let cartSummary = { subtotal: 0, shipping: 0, total: 0 };
+
+    async function loadCart() {
+      const content = document.getElementById('cart-content');
+
+      const { status, data } = await apiRequest('GET', '/cart', null, true);
+
+      if (status === 401) {
+        window.location.href = '/login.html';
+        return;
+      }
+
+      if (status !== 200 || !data.data) {
+        content.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><h3>Failed to load cart</h3></div>`;
+        return;
+      }
+
+      const cart = data.data;
+      // Store initial summary — BUG-005: this won't update after quantity changes
+      cartSummary = { subtotal: cart.subtotal, shipping: cart.shipping, total: cart.total };
+
+      if (cart.items.length === 0) {
+        content.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-icon">🛒</div>
+            <h3>Your cart is empty</h3>
+            <p>Looks like you haven't added any products yet.</p>
+            <a href="/products.html" class="btn btn-primary">Continue Shopping</a>
+          </div>
+        `;
+        return;
+      }
+
+      renderCart(cart);
+    }
+
+    function renderCart(cart) {
+      const content = document.getElementById('cart-content');
+
+      const tableRows = cart.items.map(item => `
+        <tr id="row-${item.id}">
+          <td>
+            <div class="cart-product-info">
+              <img src="${item.imageUrl}" alt="${item.name}" class="cart-product-img" />
+              <div>
+                <div class="cart-product-name">${item.name}</div>
+                <div class="text-muted" style="font-size:0.8rem; text-transform: capitalize;">${item.category}</div>
+              </div>
+            </div>
+          </td>
+          <td>${formatPrice(item.price)}</td>
+          <td>
+            <input
+              type="number"
+              class="cart-qty-input"
+              value="${item.quantity}"
+              min="1"
+              max="99"
+              id="qty-${item.id}"
+              data-item-id="${item.id}"
+              onblur="updateQuantity('${item.id}')"
+            />
+          </td>
+          <td id="line-total-${item.id}">${formatPrice(item.lineTotal)}</td>
+          <td>
+            <button class="btn btn-danger btn-sm" onclick="removeItem('${item.id}')">Remove</button>
+          </td>
+        </tr>
+      `).join('');
+
+      content.innerHTML = `
+        <div class="cart-layout">
+          <div>
+            <div class="card" style="padding: 0; overflow: hidden;">
+              <table class="cart-table">
+                <thead>
+                  <tr>
+                    <th>Product</th>
+                    <th>Price</th>
+                    <th>Qty</th>
+                    <th>Total</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="cart-tbody">
+                  ${tableRows}
+                </tbody>
+              </table>
+            </div>
+            <div class="mt-2">
+              <a href="/products.html" class="btn btn-ghost btn-sm">&#8592; Continue Shopping</a>
+            </div>
+          </div>
+
+          <div class="card order-summary-card" id="order-summary">
+            <h3 style="margin-bottom: 1.25rem;">Order Summary</h3>
+            <div class="summary-line">
+              <span>Subtotal</span>
+              <span id="summary-subtotal">${formatPrice(cart.subtotal)}</span>
+            </div>
+            <div class="summary-line">
+              <span>Shipping</span>
+              <span id="summary-shipping">${formatPrice(cart.shipping)}</span>
+            </div>
+            <div class="summary-line total">
+              <span>Total</span>
+              <span id="summary-total">${formatPrice(cart.total)}</span>
+            </div>
+            <a href="/checkout.html" class="btn btn-primary btn-full mt-2">Proceed to Checkout</a>
+          </div>
+        </div>
+      `;
+    }
+
+    async function updateQuantity(itemId) {
+      const input = document.getElementById('qty-' + itemId);
+      const qty = parseInt(input.value);
+
+      if (isNaN(qty) || qty < 1) {
+        input.value = 1;
+        return;
+      }
+
+      const { status, data } = await apiRequest('PUT', '/cart/items/' + itemId, { quantity: qty }, true);
+
+      if (status === 200 && data.data) {
+        // BUG-005: We DO NOT update the order summary here.
+        // The individual line total is also not recalculated on the page.
+        // Only a full page reload will show accurate totals.
+        // A correct implementation would update #summary-subtotal, #summary-shipping, #summary-total here.
+        showToast('Quantity updated.', 'info');
+        // Note: cartSummary and displayed totals remain stale — this is BUG-005.
+      } else if (status !== 200) {
+        showToast(data.message || 'Failed to update quantity.', 'error');
+        // Reset input to original value
+        const { status: s2, data: d2 } = await apiRequest('GET', '/cart', null, true);
+        if (s2 === 200 && d2.data) {
+          const item = d2.data.items.find(i => i.id === itemId);
+          if (item) input.value = item.quantity;
+        }
+      }
+    }
+
+    async function removeItem(itemId) {
+      const { status, data } = await apiRequest('DELETE', '/cart/items/' + itemId, null, true);
+
+      // BUG-012 in API: returns 200 even for non-existent items
+      if (status === 200) {
+        showToast('Item removed.', 'success');
+        // Reload the full cart to get accurate state
+        loadCart();
+        updateCartCount();
+      } else {
+        showToast(data.message || 'Failed to remove item.', 'error');
+      }
+    }
+
+    loadCart();
+  </script>
+</body>
+</html>

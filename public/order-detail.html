@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Order Detail — ShopSmart</title>
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <header>
+    <nav class="navbar" id="navbar"></nav>
+  </header>
+
+  <main class="page-wrapper">
+    <div class="container" style="max-width: 800px;">
+      <div class="breadcrumb">
+        <a href="/index.html">Home</a>
+        <span>/</span>
+        <a href="/orders.html">My Orders</a>
+        <span>/</span>
+        <span>Order Detail</span>
+      </div>
+
+      <div id="order-content">
+        <div class="flex-center" style="padding: 4rem;">
+          <div class="spinner"></div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+      <p>&copy; 2024 ShopSmart. All rights reserved.</p>
+    </div>
+  </footer>
+
+  <script src="/js/main.js"></script>
+  <script>
+    renderNavbar();
+    requireAuth();
+
+    const orderId = getQueryParam('orderId');
+
+    if (!orderId) {
+      document.getElementById('order-content').innerHTML = `
+        <div class="empty-state">
+          <div class="empty-icon">⚠️</div>
+          <h3>No order ID provided</h3>
+          <a href="/orders.html" class="btn btn-primary">Back to Orders</a>
+        </div>
+      `;
+    } else {
+      loadOrder();
+    }
+
+    async function loadOrder() {
+      const content = document.getElementById('order-content');
+      // BUG-009 in API: No ownership check — any authenticated user can view any order by ID.
+      const { status, data } = await apiRequest('GET', '/orders/' + orderId, null, true);
+
+      if (status === 404) {
+        content.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-icon">🔍</div>
+            <h3>Order not found</h3>
+            <a href="/orders.html" class="btn btn-primary">Back to Orders</a>
+          </div>
+        `;
+        return;
+      }
+
+      if (status !== 200 || !data.data) {
+        content.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><h3>Failed to load order</h3></div>`;
+        return;
+      }
+
+      const order = data.data.order;
+      const addr = order.shippingAddress || {};
+
+      const itemRows = order.items.map(item => `
+        <tr>
+          <td>${item.productName}</td>
+          <td>${item.quantity}</td>
+          <td>${formatPrice(item.unitPrice)}</td>
+          <td>${formatPrice(item.lineTotal)}</td>
+        </tr>
+      `).join('');
+
+      const addressText = addr.address1
+        ? `${addr.firstName || ''} ${addr.lastName || ''}<br>${addr.address1}${addr.address2 ? ', ' + addr.address2 : ''}<br>${addr.city || ''}, ${addr.state || ''} ${addr.zip || ''}<br>${addr.country || ''}`
+        : '<em class="text-muted">No shipping address provided</em>';
+
+      content.innerHTML = `
+        <div class="flex-between mb-3">
+          <h1 style="font-size: 1.4rem;">Order #${order.id.substring(0, 8).toUpperCase()}</h1>
+          <span class="status-badge status-${order.status}" style="font-size: 0.875rem; padding: 0.35rem 0.9rem;">${order.status}</span>
+        </div>
+        <div class="text-muted mb-3" style="font-size: 0.875rem;">Placed on ${formatDate(order.createdAt)}</div>
+
+        <div class="card mb-3">
+          <h4 style="margin-bottom: 1rem;">Items</h4>
+          <table class="order-items-table">
+            <thead>
+              <tr>
+                <th>Product</th>
+                <th>Qty</th>
+                <th>Unit Price</th>
+                <th>Total</th>
+              </tr>
+            </thead>
+            <tbody>${itemRows}</tbody>
+          </table>
+
+          <hr class="divider" />
+
+          <div style="max-width: 280px; margin-left: auto;">
+            <div class="summary-line">
+              <span class="text-muted">Subtotal</span>
+              <span>${formatPrice(order.subtotal)}</span>
+            </div>
+            <div class="summary-line">
+              <span class="text-muted">Shipping</span>
+              <span>${formatPrice(order.shipping)}</span>
+            </div>
+            <div class="summary-line total">
+              <span>Total</span>
+              <span>${formatPrice(order.total)}</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="card mb-3">
+          <h4 style="margin-bottom: 0.75rem;">Shipping Address</h4>
+          <p style="font-size: 0.875rem; line-height: 1.8;">${addressText}</p>
+        </div>
+
+        <a href="/orders.html" class="btn btn-secondary">&#8592; Back to Orders</a>
+      `;
+    }
+
+    loadOrder();
+  </script>
+</body>
+</html>

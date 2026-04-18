@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Checkout — ShopSmart</title>
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <header>
+    <nav class="navbar" id="navbar"></nav>
+  </header>
+
+  <main class="page-wrapper">
+    <div class="container">
+      <h1 style="margin-bottom: 1.5rem;">Checkout</h1>
+
+      <div id="checkout-content">
+        <div class="flex-center" style="padding: 4rem;">
+          <div class="spinner"></div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+      <p>&copy; 2024 ShopSmart. All rights reserved.</p>
+    </div>
+  </footer>
+
+  <script src="/js/main.js"></script>
+  <script>
+    renderNavbar();
+    requireAuth();
+
+    async function loadCheckout() {
+      const content = document.getElementById('checkout-content');
+      const { status, data } = await apiRequest('GET', '/cart', null, true);
+
+      if (status === 401) { window.location.href = '/login.html'; return; }
+
+      if (status !== 200 || !data.data || data.data.items.length === 0) {
+        content.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-icon">🛒</div>
+            <h3>Your cart is empty</h3>
+            <p>Add items to your cart before checking out.</p>
+            <a href="/products.html" class="btn btn-primary">Shop Now</a>
+          </div>
+        `;
+        return;
+      }
+
+      const cart = data.data;
+      renderCheckoutForm(cart);
+    }
+
+    function renderCheckoutForm(cart) {
+      const content = document.getElementById('checkout-content');
+
+      const itemRows = cart.items.map(item => `
+        <div class="checkout-item">
+          <div>
+            <div class="checkout-item-name">${item.name}</div>
+            <div class="checkout-item-qty text-muted">Qty: ${item.quantity}</div>
+          </div>
+          <div>${formatPrice(item.lineTotal)}</div>
+        </div>
+      `).join('');
+
+      content.innerHTML = `
+        <div class="checkout-layout">
+          <!-- Left: Forms -->
+          <div>
+            <!-- Shipping Address -->
+            <div class="checkout-section card">
+              <h3>Shipping Address</h3>
+              <!-- BUG-006: Client-side validation on shipping fields is skipped.
+                   Even if all fields are empty, the form will submit successfully.
+                   This mirrors the API-level bug where shippingAddress is not validated. -->
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label" for="ship-first-name">First Name</label>
+                  <input type="text" id="ship-first-name" class="form-control" placeholder="John" />
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="ship-last-name">Last Name</label>
+                  <input type="text" id="ship-last-name" class="form-control" placeholder="Doe" />
+                </div>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="ship-address1">Address Line 1</label>
+                <input type="text" id="ship-address1" class="form-control" placeholder="123 Main Street" />
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="ship-address2">Address Line 2 <span class="text-muted">(optional)</span></label>
+                <input type="text" id="ship-address2" class="form-control" placeholder="Apt, suite, unit..." />
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label" for="ship-city">City</label>
+                  <input type="text" id="ship-city" class="form-control" placeholder="Austin" />
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="ship-state">State</label>
+                  <input type="text" id="ship-state" class="form-control" placeholder="TX" />
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label" for="ship-zip">ZIP Code</label>
+                  <input type="text" id="ship-zip" class="form-control" placeholder="78701" />
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="ship-country">Country</label>
+                  <input type="text" id="ship-country" class="form-control" placeholder="US" value="US" />
+                </div>
+              </div>
+            </div>
+
+            <!-- Payment -->
+            <div class="checkout-section card" style="margin-top: 1.25rem;">
+              <h3>Payment Details</h3>
+              <div class="alert alert-info" style="font-size: 0.8rem; margin-bottom: 1rem;">
+                Demo only — no real payment is processed. Use any 16-digit card number.
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="card-name">Cardholder Name <span class="required">*</span></label>
+                <input type="text" id="card-name" class="form-control" placeholder="John Doe" />
+                <span class="form-error" id="card-name-error"></span>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="card-number">Card Number <span class="required">*</span></label>
+                <input type="text" id="card-number" class="form-control" placeholder="1234 5678 9012 3456" maxlength="19" />
+                <span class="form-error" id="card-number-error"></span>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label" for="expiry-month">Expiry Month <span class="required">*</span></label>
+                  <select id="expiry-month" class="form-control">
+                    <option value="">MM</option>
+                    ${Array.from({length: 12}, (_, i) => i + 1).map(m => `<option value="${String(m).padStart(2,'0')}">${String(m).padStart(2,'0')}</option>`).join('')}
+                  </select>
+                  <span class="form-error" id="expiry-month-error"></span>
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="expiry-year">Expiry Year <span class="required">*</span></label>
+                  <input type="text" id="expiry-year" class="form-control" placeholder="${new Date().getFullYear()}" maxlength="4" />
+                  <span class="form-error" id="expiry-year-error"></span>
+                </div>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="cvv">CVV <span class="required">*</span></label>
+                <input type="text" id="cvv" class="form-control" placeholder="123" maxlength="4" />
+                <span class="form-error" id="cvv-error"></span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right: Order Summary -->
+          <div>
+            <div class="card order-summary-card">
+              <h3 style="margin-bottom: 1.25rem;">Order Summary</h3>
+              <div class="checkout-items">
+                ${itemRows}
+              </div>
+              <hr class="divider" />
+              <div class="summary-line">
+                <span>Subtotal</span>
+                <span>${formatPrice(cart.subtotal)}</span>
+              </div>
+              <div class="summary-line">
+                <span>Shipping</span>
+                <span>${formatPrice(cart.shipping)}</span>
+              </div>
+              <div class="summary-line total">
+                <span>Total</span>
+                <span>${formatPrice(cart.total)}</span>
+              </div>
+
+              <div id="checkout-alert" class="alert hidden" style="margin-top: 1rem;"></div>
+
+              <!-- BUG-013: No loading state or disabled-after-click logic on this button.
+                   Rapid double-clicking sends two POST /api/checkout requests. -->
+              <button class="btn btn-primary btn-full mt-2" id="place-order-btn" onclick="placeOrder()">
+                Place Order
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+
+      // Format card number with spaces
+      document.getElementById('card-number').addEventListener('input', function () {
+        let val = this.value.replace(/\D/g, '').substring(0, 16);
+        this.value = val.replace(/(\d{4})(?=\d)/g, '$1 ');
+      });
+    }
+
+    async function placeOrder() {
+      // BUG-013: No button disabling or loading state — double-click sends duplicate orders.
+      // A correct implementation would disable the button immediately on click.
+
+      const alertEl = document.getElementById('checkout-alert');
+      alertEl.className = 'alert hidden';
+
+      // Validate payment fields (client-side)
+      let valid = true;
+      const cardNumber = document.getElementById('card-number').value.replace(/\s/g, '');
+      const expiryMonth = document.getElementById('expiry-month').value;
+      const expiryYear = document.getElementById('expiry-year').value;
+      const cvv = document.getElementById('cvv').value;
+      const cardName = document.getElementById('card-name').value.trim();
+      const currentYear = new Date().getFullYear();
+
+      clearFieldError('card-name', 'card-name-error');
+      clearFieldError('card-number', 'card-number-error');
+      clearFieldError('expiry-year', 'expiry-year-error');
+      clearFieldError('cvv', 'cvv-error');
+
+      if (!cardName) {
+        setFieldError('card-name', 'card-name-error', 'Cardholder name is required.');
+        valid = false;
+      }
+      if (!cardNumber || !/^\d{16}$/.test(cardNumber)) {
+        setFieldError('card-number', 'card-number-error', 'Card number must be exactly 16 digits.');
+        valid = false;
+      }
+      if (!expiryYear || parseInt(expiryYear) < currentYear || expiryYear.length !== 4) {
+        setFieldError('expiry-year', 'expiry-year-error', `Expiry year must be ${currentYear} or later.`);
+        valid = false;
+      }
+      if (!cvv || !/^\d{3,4}$/.test(cvv)) {
+        setFieldError('cvv', 'cvv-error', 'CVV must be 3 or 4 digits.');
+        valid = false;
+      }
+
+      if (!valid) return;
+
+      // Build shipping address object
+      // BUG-006: No client-side required validation on shipping fields.
+      // Empty shipping address still submits, and the API will accept it.
+      const shippingAddress = {
+        firstName: document.getElementById('ship-first-name').value.trim(),
+        lastName: document.getElementById('ship-last-name').value.trim(),
+        address1: document.getElementById('ship-address1').value.trim(),
+        address2: document.getElementById('ship-address2').value.trim(),
+        city: document.getElementById('ship-city').value.trim(),
+        state: document.getElementById('ship-state').value.trim(),
+        zip: document.getElementById('ship-zip').value.trim(),
+        country: document.getElementById('ship-country').value.trim()
+      };
+
+      const payment = {
+        cardholderName: cardName,
+        cardNumber: cardNumber,
+        expiryMonth: expiryMonth,
+        expiryYear: expiryYear,
+        cvv: cvv
+      };
+
+      // BUG-013: Button is NOT disabled here. A correct implementation would do:
+      // btn.disabled = true; btn.innerHTML = '<span class="spinner-inline"></span> Placing Order...';
+
+      const { status, data } = await apiRequest('POST', '/checkout', { shippingAddress, payment }, true);
+
+      if (status === 201 && data.data) {
+        const orderId = data.data.order.id;
+        window.location.href = '/order-confirmation.html?orderId=' + orderId;
+        return;
+      }
+
+      if (status === 400) {
+        alertEl.className = 'alert alert-error';
+        alertEl.textContent = data.message || 'Please fix the errors and try again.';
+        alertEl.classList.remove('hidden');
+
+        if (data.errors) {
+          if (data.errors.cardNumber) setFieldError('card-number', 'card-number-error', data.errors.cardNumber);
+          if (data.errors.expiryYear) setFieldError('expiry-year', 'expiry-year-error', data.errors.expiryYear);
+          if (data.errors.cvv) setFieldError('cvv', 'cvv-error', data.errors.cvv);
+        }
+        return;
+      }
+
+      alertEl.className = 'alert alert-error';
+      alertEl.textContent = data.message || 'Checkout failed. Please try again.';
+      alertEl.classList.remove('hidden');
+    }
+
+    loadCheckout();
+  </script>
+</body>
+</html>

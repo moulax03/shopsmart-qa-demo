@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ShopSmart — Quality Products, Smart Prices</title>
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <!-- Navbar -->
+  <header>
+    <nav class="navbar" id="navbar"></nav>
+  </header>
+
+  <!-- Hero Section -->
+  <section class="hero">
+    <div class="container">
+      <h1>Welcome to ShopSmart</h1>
+      <p>Quality Products, Smart Prices. Discover thousands of items across electronics, furniture, kitchen, and sports.</p>
+      <a href="/products.html" class="btn btn-accent btn-lg">Shop Now</a>
+    </div>
+  </section>
+
+  <!-- Category Cards -->
+  <section class="section">
+    <div class="container">
+      <div class="section-title">
+        <h2>Shop by Category</h2>
+        <p>Find exactly what you're looking for</p>
+      </div>
+      <div class="category-grid">
+        <a href="/products.html?category=electronics" class="category-card">
+          <div class="cat-icon">💻</div>
+          <div class="cat-name">Electronics</div>
+        </a>
+        <a href="/products.html?category=furniture" class="category-card">
+          <div class="cat-icon">🪑</div>
+          <div class="cat-name">Furniture</div>
+        </a>
+        <a href="/products.html?category=kitchen" class="category-card">
+          <div class="cat-icon">🍳</div>
+          <div class="cat-name">Kitchen</div>
+        </a>
+        <a href="/products.html?category=sports" class="category-card">
+          <div class="cat-icon">🏃</div>
+          <div class="cat-name">Sports</div>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Featured Products -->
+  <section class="section" style="background: #fff; padding: 3rem 0;">
+    <div class="container">
+      <div class="section-title">
+        <h2>Featured Products</h2>
+        <p>Our most popular picks right now</p>
+      </div>
+      <div class="product-grid" id="featured-grid">
+        <!-- Populated by JS -->
+        <div class="empty-state" id="featured-loading">
+          <div class="spinner" style="margin: 0 auto;"></div>
+        </div>
+      </div>
+      <div class="text-center mt-3">
+        <a href="/products.html" class="btn btn-secondary">View All Products</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="container">
+      <p>&copy; 2024 ShopSmart. All rights reserved. &nbsp;|&nbsp; <a href="/404.html">Help</a></p>
+    </div>
+  </footer>
+
+  <script src="/js/main.js"></script>
+  <script>
+    renderNavbar();
+
+    async function loadFeaturedProducts() {
+      const grid = document.getElementById('featured-grid');
+      const loading = document.getElementById('featured-loading');
+
+      const { status, data } = await apiRequest('GET', '/products?limit=8');
+
+      if (loading) loading.remove();
+
+      if (status !== 200 || !data.data) {
+        grid.innerHTML = '<p class="text-muted">Could not load products.</p>';
+        return;
+      }
+
+      const products = data.data.products;
+
+      if (products.length === 0) {
+        grid.innerHTML = '<p class="text-muted">No products available.</p>';
+        return;
+      }
+
+      grid.innerHTML = products.map(p => buildProductCard(p)).join('');
+    }
+
+    function buildProductCard(p) {
+      const isOutOfStock = p.stockCount === 0;
+      const priceClass = p.price < 0 ? 'price-negative' : '';
+      return `
+        <div class="product-card ${isOutOfStock ? 'out-of-stock' : ''}">
+          <img src="${p.imageUrl}" alt="${p.name}" class="product-card-image" loading="lazy" />
+          <div class="product-card-body">
+            <div class="product-card-meta">
+              <span class="category-badge">${p.category}</span>
+              ${isOutOfStock ? '<span class="out-of-stock-badge">Out of Stock</span>' : ''}
+            </div>
+            <div class="product-card-name">${p.name}</div>
+            <div class="product-card-price ${priceClass}">${formatPrice(p.price)}</div>
+            <div class="product-card-rating">
+              <span class="stars">${renderStars(p.rating)}</span>
+              <span>(${p.reviewCount})</span>
+            </div>
+            <div class="product-card-actions">
+              <a href="/product-detail.html?id=${p.id}" class="btn btn-primary btn-sm btn-full">View Details</a>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    loadFeaturedProducts();
+  </script>
+</body>
+</html>

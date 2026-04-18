@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Products — ShopSmart</title>
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <header>
+    <nav class="navbar" id="navbar"></nav>
+  </header>
+
+  <main class="page-wrapper">
+    <div class="container">
+      <!-- Search Bar -->
+      <div class="search-bar">
+        <input type="text" id="search-input" class="form-control" placeholder="Search products..." value="" />
+        <button class="btn btn-primary" onclick="applyFilters()">Search</button>
+      </div>
+
+      <div class="products-layout">
+        <!-- Filter Sidebar -->
+        <aside class="filter-sidebar card" style="padding: 1.25rem;">
+          <h3 style="margin-bottom: 1.25rem; font-size: 1rem;">Filters</h3>
+
+          <div class="filter-group">
+            <h4>Category</h4>
+            <div class="filter-option">
+              <input type="checkbox" id="cat-electronics" value="electronics" onchange="applyFilters()" />
+              <label for="cat-electronics">Electronics</label>
+            </div>
+            <div class="filter-option">
+              <input type="checkbox" id="cat-furniture" value="furniture" onchange="applyFilters()" />
+              <label for="cat-furniture">Furniture</label>
+            </div>
+            <div class="filter-option">
+              <input type="checkbox" id="cat-kitchen" value="kitchen" onchange="applyFilters()" />
+              <label for="cat-kitchen">Kitchen</label>
+            </div>
+            <div class="filter-option">
+              <input type="checkbox" id="cat-sports" value="sports" onchange="applyFilters()" />
+              <label for="cat-sports">Sports</label>
+            </div>
+          </div>
+
+          <div class="filter-group">
+            <h4>Sort By</h4>
+            <select id="sort-select" class="form-control" onchange="applyFilters()">
+              <option value="">Default</option>
+              <option value="price_asc">Price: Low to High</option>
+              <option value="price_desc">Price: High to Low</option>
+              <option value="name_asc">Name: A to Z</option>
+              <option value="name_desc">Name: Z to A</option>
+            </select>
+          </div>
+
+          <button class="btn btn-ghost btn-sm btn-full" onclick="clearFilters()">Clear Filters</button>
+        </aside>
+
+        <!-- Product Grid -->
+        <div>
+          <div class="flex-between mb-2">
+            <h2 id="results-title" style="font-size: 1.2rem;">All Products</h2>
+            <span id="results-count" class="text-muted" style="font-size: 0.875rem;"></span>
+          </div>
+
+          <div id="products-grid" class="product-grid">
+            <div style="grid-column: 1/-1; text-align: center; padding: 3rem;">
+              <div class="spinner" style="margin: 0 auto;"></div>
+            </div>
+          </div>
+
+          <div id="pagination" class="pagination"></div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+      <p>&copy; 2024 ShopSmart. All rights reserved.</p>
+    </div>
+  </footer>
+
+  <script src="/js/main.js"></script>
+  <script>
+    renderNavbar();
+
+    let currentPage = 1;
+    const LIMIT = 12;
+
+    // Pre-select category from URL
+    const urlCategory = getQueryParam('category');
+    if (urlCategory) {
+      const cb = document.getElementById('cat-' + urlCategory);
+      if (cb) cb.checked = true;
+    }
+
+    function getSelectedCategories() {
+      const cats = ['electronics', 'furniture', 'kitchen', 'sports'];
+      return cats.filter(c => {
+        const el = document.getElementById('cat-' + c);
+        return el && el.checked;
+      });
+    }
+
+    function applyFilters() {
+      currentPage = 1;
+      loadProducts();
+    }
+
+    function clearFilters() {
+      ['electronics', 'furniture', 'kitchen', 'sports'].forEach(c => {
+        const el = document.getElementById('cat-' + c);
+        if (el) el.checked = false;
+      });
+      document.getElementById('sort-select').value = '';
+      document.getElementById('search-input').value = '';
+      currentPage = 1;
+      loadProducts();
+    }
+
+    function goToPage(page) {
+      currentPage = page;
+      loadProducts();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    async function loadProducts() {
+      const grid = document.getElementById('products-grid');
+      grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:3rem;"><div class="spinner" style="margin:0 auto;"></div></div>';
+
+      const cats = getSelectedCategories();
+      const sort = document.getElementById('sort-select').value;
+      const search = document.getElementById('search-input').value.trim();
+
+      const params = new URLSearchParams({ page: currentPage, limit: LIMIT });
+      if (cats.length === 1) params.set('category', cats[0]);
+      if (sort) params.set('sort', sort);
+      if (search) params.set('search', search);
+
+      const { status, data } = await apiRequest('GET', '/products?' + params.toString());
+
+      if (status !== 200 || !data.data) {
+        grid.innerHTML = '<div style="grid-column:1/-1;"><div class="empty-state"><div class="empty-icon">⚠️</div><h3>Failed to load products</h3><p>Please try again later.</p></div></div>';
+        return;
+      }
+
+      const { products, pagination } = data.data;
+
+      // Update title and count
+      const titleEl = document.getElementById('results-title');
+      const countEl = document.getElementById('results-count');
+      const activeCat = cats.length === 1 ? cats[0] : cats.length > 1 ? 'Multiple' : 'All';
+      titleEl.textContent = cats.length === 1 ? (cats[0].charAt(0).toUpperCase() + cats[0].slice(1)) : 'All Products';
+      countEl.textContent = `${pagination.total} product${pagination.total !== 1 ? 's' : ''}`;
+
+      if (products.length === 0) {
+        grid.innerHTML = '<div style="grid-column:1/-1;"><div class="empty-state"><div class="empty-icon">🔍</div><h3>No products found</h3><p>Try adjusting your filters or search term.</p></div></div>';
+        document.getElementById('pagination').innerHTML = '';
+        return;
+      }
+
+      grid.innerHTML = products.map(p => buildProductCard(p)).join('');
+      renderPagination(pagination);
+    }
+
+    function buildProductCard(p) {
+      const isOutOfStock = p.stockCount === 0;
+      const priceClass = p.price < 0 ? 'price-negative' : '';
+      return `
+        <div class="product-card ${isOutOfStock ? 'out-of-stock' : ''}">
+          <img src="${p.imageUrl}" alt="${p.name}" class="product-card-image" loading="lazy" />
+          <div class="product-card-body">
+            <div class="product-card-meta">
+              <span class="category-badge">${p.category}</span>
+              ${isOutOfStock ? '<span class="out-of-stock-badge">Out of Stock</span>' : ''}
+            </div>
+            <div class="product-card-name">${p.name}</div>
+            <div class="product-card-price ${priceClass}">${formatPrice(p.price)}</div>
+            <div class="product-card-rating">
+              <span class="stars">${renderStars(p.rating)}</span>
+              <span>(${p.reviewCount})</span>
+            </div>
+            <div class="product-card-actions">
+              <a href="/product-detail.html?id=${p.id}" class="btn btn-primary btn-sm btn-full">View Details</a>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderPagination(pagination) {
+      const container = document.getElementById('pagination');
+      if (pagination.totalPages <= 1) { container.innerHTML = ''; return; }
+
+      let html = '';
+      html += `<button class="page-btn" onclick="goToPage(${pagination.page - 1})" ${!pagination.hasPrev ? 'disabled' : ''}>&#8249;</button>`;
+
+      for (let i = 1; i <= pagination.totalPages; i++) {
+        if (pagination.totalPages > 7 && Math.abs(i - pagination.page) > 2 && i !== 1 && i !== pagination.totalPages) {
+          if (i === pagination.page - 3 || i === pagination.page + 3) html += '<span style="padding: 0 0.25rem; color: var(--text-muted);">…</span>';
+          continue;
+        }
+        html += `<button class="page-btn ${i === pagination.page ? 'active' : ''}" onclick="goToPage(${i})">${i}</button>`;
+      }
+
+      html += `<button class="page-btn" onclick="goToPage(${pagination.page + 1})" ${!pagination.hasNext ? 'disabled' : ''}>&#8250;</button>`;
+      container.innerHTML = html;
+    }
+
+    // Listen for Enter key in search
+    document.getElementById('search-input').addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') applyFilters();
+    });
+
+    loadProducts();
+  </script>
+</body>
+</html>
